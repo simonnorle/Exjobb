@@ -368,8 +368,8 @@ def p2g_wwtp3(
     # oxygen income, and heat income
     
     # Define solver (Gurobi/PuLP)
-    solver = plp.GUROBI_CMD()
-    # solver = plp.PULP_CBC_CMD() # Uncomment to use built-in PuLP solver
+    #solver = plp.GUROBI_CMD()
+    solver = plp.PULP_CBC_CMD() # Uncomment to use built-in PuLP solver
     status = prob.solve(solver)
 
     e_op = []

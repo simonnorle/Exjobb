@@ -97,24 +97,25 @@ return P_ele    #P_ele (list) används senare till beräkningar
 # %%
 # Alternativ formulering som beräknar för alla timmar för en dag, designad för att anropas på rad 189 i simulation.py
 def styrning2_alt(
-        i1, # Int, first hour of the day relative to the entire year
-        H2_demand, #List, the hourly hydrogen demand [kg/h] istället, är det elz_dispatch.iloc[:,6] "Demand"?
-        H2_storage, #List, the hourly amount of hydrogen in storage [kg], bör vara  h2_storage_list[i1:i2]
-        h2st_size_vector, #List with one value, the maximum hydrogen storage capacity [kg]
-        P_bau, # List of the "default" electrolyzer power [MW], bör vara electrolyzer[i1:i2]
-        P_pv, #List of the hourly generated power from the PV panels [kW]
-        h2_prod, # Unclear type, gives the conversion ratio/electrolyzer efficiency at a given load (indirectly)
-        FCR_D, # Boolean, True if participating as FCR-D down, otherwise False
-        FCR_U, # Boolean, True if participating as FCR-D up, otherwise False
-        FCR_N, # Boolean, True if participating as FCR-N, otherwise False, ska denna vara med?
-        Flex_frac_FCR_D, #List, the hourly fraction of the time the flexibility resource FCR_D was active
-        Flex_frac_FCR_U, #List, the hourly fraction of the time the flexibility resource FCR_U was active
-        FCR_D_power, #List, the hourly power demand for FCR-D down in bidding region SE3
-        FCR_D_price, #List, the hourly price/MW for FCR-D down in bidding region SE3
-        FCR_U_power, #List, the hourly power demand for FCR-D up in bidding region SE3
-        FCR_U_prize,  #List, the hourly price/MW for FCR-D up in bidding region SE3
-        pwl_points, #Float/Int, affects the resolution of H2 efficiency
-        h2_prod #List, H2 production at a given partial load ranging from 0-100% with step size 1/pwl_points
+        i1: int, # Int, first hour of the day relative to the entire year
+        H2_demand: list, #List, the hourly hydrogen demand [kg/h] istället, är det elz_dispatch.iloc[:,6] "Demand"?
+        H2_storage: list, #List, the hourly amount of hydrogen in storage [kg], bör vara  h2_storage_list[i1:i2]
+        h2st_size_vector: list, #List with one value, the maximum hydrogen storage capacity [kg]
+        P_bau: list, # List of the "default" electrolyzer power [MW], bör vara electrolyzer[i1:i2]
+        P_pv: list, #List of the hourly generated power from the PV panels [kW]
+        P_max: float, #Float, maximum rated power of the electrolyzer [MW]
+        h2_prod: list, #List, H2 production at a given partial load ranging from 0-100% with step size 1/len(h2_prod)
+        FCR_D: bool, # Boolean, True if participating as FCR-D down, otherwise False
+        FCR_U: bool, # Boolean, True if participating as FCR-D up, otherwise False
+        FCR_N: bool, # Boolean, True if participating as FCR-N, otherwise False, ska denna vara med?
+        Flex_frac_FCR_D: list, #List, the hourly fraction of the time the flexibility resource FCR_D was active
+        Flex_frac_FCR_U: list, #List, the hourly fraction of the time the flexibility resource FCR_U was active
+        FCR_D_power: list, #List, the hourly power demand for FCR-D down in bidding region SE3
+        FCR_D_price: list, #List, the hourly price/MW for FCR-D down in bidding region SE3
+        FCR_U_power: list, #List, the hourly power demand for FCR-D up in bidding region SE3
+        FCR_U_prize: list,  #List, the hourly price/MW for FCR-D up in bidding region SE3
+        
+        
 ):
     electrolyzer = [0]*24 # Creates list of same size (no of hours in a day)
     E_activated = [0]*24
@@ -123,83 +124,87 @@ def styrning2_alt(
     deltaH2_max = [0]*24
     deltaP_max = [0]*24
     Storage_state = [0]*24
-    #Måste skriva om så att i1 och i2 används korrekt, i1+i för de listor som är för hela året
-    for i in range(int(24)): #endast för en dag, så 24 h
-       if i1 == 0 and i == 0: # Endast för första timmen på första dagen då algoritmen annars använder tidigare tidssteg
-           if H2_storage[i] >= H2_demand[i]: #Gren 1
-                if FCR_D == True:
-                    Storage_state = H2_storage[i]/H2_demand[i] #ska Storage_state vara float eller list? [h] eller enhetslöst (samma värde då detta är för en timme)
-                    electrolyzer[i] = P_bau[i] + Q_H2[i]*(1-Storage_state) # Osäker på hur denna ska vara skriven, ska se till att lagret inte blir fullt
-                    H2_storage[i+1] = 
-                elif FCR_U == True:         #Gällande ovan rad, P_bau ska kanske vara tidigare stegs effekt P_ele [i-1]?
-                    electrolyzer[i] = P_pv[i]/(faktor)
-                else:
-                    electrolyzer[i] = P_bau[i] #Om inte på stödtjänstmarknaden gäller business as usual
-            else: # Gren 2, implicit H2_storage[i] < H2_demand[i]
-                P_min[i] = (H2_demand[i]-H2_storage[i])/const # Också osäler på hur denna ska skrivas
-                if FCR_D == True:
-                    a
-                elif FCR_U == True:
-                    a
-                else:
-                    electrolyzer[i] = P_bau
-       else: #For every other hour than the first
-           FCR_D = FCR_D #Resets boolean value to the imput value
-           FCR_U = FCR_U
-           index_max = [j for j,x in enumerate(H2_storage) if x == h2st_size_vector[0]] #Returns list of indices where the storage is full
-           FCR_D = False if i <= index_max[-1] else FCR_D # Disables FCR-D down as long as the planned storage is full, enables FCR-D down once the storage won't be full for the rest of the day
-
-           if H2_storage[i] >= H2_demand[i]: #Gren 1
-                FCR_D = False if H2_storage[i] == h2st_size_vector[0] else FCR_D #Borde fungera som en rad, No increased production if the storage is full
-                if FCR_D == True and FCR_U == False: #Behöver det finnas en övre gräns för P_ele (finns realistiskt iaf)?
-                     H2_max[i] = h2st_size_vector[0] + H2_storage[i] - H2_demand[i] ##Alternativt uttryck från vätgasbalans
-                     H2_index = [k for k,x in enumerate(H2_prod) if H2_max[i] == H2_prod[k]] #Finds the index where the produced hydrogen is the same, requires uniqe values(?)
-                     P_H2_max = H2_index[0]+1 / pwl_points * P_max
-                     # P_H2_max = ([k for k,x in enumerate(H2_prod) if H2_max[i] == H2_prod[k]]+1)/len(H2_prod)*P_max #Alternativ omskrivning
-                     deltaP_max[i] = P_H2_max - P_bau[i]
-                     P_reserved[i] = deltaP_max[i] # Maximum possible power reserved as frequency regulation
-                     Income_flex[i] = P_reserved[i] * FCR_D_price[i1+i]
-                     E_activated[i] = deltaP_max[i] * Flex_frac_FCR_D[i1+i] 
-                     electrolyzer[i] = P_bau[i] + E_activated[i]
-                     H2_storage = [x+E_activated[i]*h2_prod if j > index_max[-1] else x for j,x in enumerate(H2_storage)] # Increases storage for all indices after the last time the storage is full 
-                 elif FCR_U == True and FCR_D == False:         #Gällande ovan rad, P_bau ska kanske vara tidigare stegs effekt P_ele [i-1]?
-                     if P_pv[i1+i] >= GRÄNS (från lager): # Gränsvärde för att undvika kallstarter om P_pv = 0.
-                         P_reserved[i] = P_bau[i] - P_pv[i1+i] #Reglerar ned så mycket som möjligt, med P_pv som undre gräns. Positiv eller negativ?
-                         Income_flex[i] = P_reserved[i] * FCR_U_prize[i1+i]
-                         E_activated[i] = -P_reserved[i] * Flex_frac_FCR_U[i1+i] # Negative as it's a reduction in used energy
-                         H2_storage = [x + E_activated[i] * factor(h2_prod) if j>= i else x for j,x in enumerate(H2_storage)] #Adds to all future storage, not retroactively
-                     else:
-                         P_reserved[i] = P_bau[i] - GRÄNS
-                         Income_flex[i] = P_reserved[i] * FCR_U_prize[i1+i]
-                         E_activated[i] = -P_reserved[i] * Flex_frac_FCR_U[i1+i] # Negative as it's a reduction in used energy
-                         H2_storage = [x + E_activated[i] * factor(h2_prod) if j>= i else x for j,x in enumerate(H2_storage)] #Adds to all future storage, not retroactively
-                 else:
-                     electrolyzer[i] = P_bau[i] #Om inte på stödtjänstmarknaden gäller business as usual
-                 
-            else: # Gren 2, implicit H2_storage[i] < H2_demand[i]
-                if FCR_D == True and FCR_U == False:
-                    #Styrningen kommer nog se till att metaniseringsbehovet alltid täcks, så P_bau räcker i basfallet
-                    # Ska denna vara nästan samma som FCR_D i första grenen?
-                    Storage_state[i] = (H2_storage[i]-H2_demand[i])/h2st_size_vector[0] #Determines remaining fraction of the storage after 1h
-                    deltaH2_max[i] = (1-Storage_state[i])*h2st_size_vector[0] # Maximum possible hourly increase in hydrogen production [kg]
-                    deltaP_max[i] = deltaH2_max[i] * faktor(param.Electrolyzer().efficiency())
-                    deltaP_max[i] = P_max - P_bau[i] if deltaP_max[i]+P_bau[i] > P_max else deltaP_max #Upper limit is P_max
-                    P_reserved[i] = deltaP_max[i] # Maximum possible power reserved as frequency regulation
-                    Income_flex[i] = P_reserved[i] * FCR_D_price[i1+i]
-                    E_activated[i] = (P_bau[i] + deltaP_max)*Flex_frac_FCR_D[i1+i] # Osäker på hur denna ska vara skriven, ska se till att lagret inte blir fullt
-                    H2_storage = [x+E_activated[i]*h2_prod if j > index_max[-1] else x for j,x in H2_storage] # Increases storage for all indices after the last time the storage is full 
-                
-                elif FCR_U == True and FCR_D == False:
-                    Storage_state[i] = (H2_storage[i]-H2_demand[i])/h2st_size_vector[0] #Will be negative
-                    P_min[i] = (H2_demand[i]-H2_storage[i]) * h2_prod # The minimal electrolyzer power that leaves h2_storage non-negative (at zero)
-                    P_reserved[i] = P_bau[i] - P_min[i]
-                    Income_flex[i] = P_reserved[i] * FCR_U_prize[i1+i]
-                    E_activated[i] = -P_reserved[i] * Flex_frac_FCR_U[i1+i]
-                    H2_storage = [x + E_activated[i] * h2_prod if j>= i else x for j,x in enumerate(H2_storage)] #Adds to all future storage, not retroactively
-
-                else:
-                    electrolyzer[i] = P_bau[i]
-return P_ele, Income_flex, E_activated, H2_storage    #P_ele (list) används senare till beräkningar
+    FCR_D_orginal = FCR_D
+    FCR_U_orginal = FCR_U
+    FCR_N_orginal = FCR_N
+    
+for i in range(int(24)): #endast för en dag, så 24
+    FCR_D = FCR_D_orginal #Resets boolean value to the imput value
+    FCR_U = FCR_U_orginal
+    index_max = [j for j,x in enumerate(H2_storage) if x >= h2st_size_vector[0]] #Returns list of indices where the storage is full
+    FCR_D = False if i <= index_max[-1] else FCR_D # Disables FCR-D down as long as the planned storage is full, enables FCR-D down once the storage won't be full for the rest of the day
+    
+    if H2_storage[i] >= H2_demand[i]: #Branch 1
+        FCR_D = False if H2_storage[i] == h2st_size_vector[0] else FCR_D #Borde fungera som en rad, No increased production if the storage is full
+        if FCR_D == True and FCR_U == False: #Behöver det finnas en övre gräns för P_ele (finns realistiskt iaf)?
+            H2_max[i] = h2st_size_vector[0] + H2_storage[i] - H2_demand[i] ##Alternativt uttryck från vätgasbalans
+            H2_index = [k for k,x in enumerate(H2_prod) if H2_max[i] == H2_prod[k]] #Finds the index where the produced hydrogen is the same, requires uniqe values(?)
+            P_H2_max = P_max * (H2_index[0]+1) / len(h2_prod) 
+            # P_H2_max = ([k for k,x in enumerate(H2_prod) if H2_max[i] == H2_prod[k]]+1)/len(H2_prod)*P_max #Alternativ omskrivning
+            deltaP_max[i] = P_H2_max - P_bau[i]
+            P_reserved[i] = deltaP_max[i] # Maximum possible power reserved as frequency regulation
+            Income_flex[i] = P_reserved[i] * FCR_D_price[i1+i]
+            E_activated[i] = deltaP_max[i] * Flex_frac_FCR_D[i1+i] 
+            electrolyzer[i] = P_bau[i] + E_activated[i]
+            H2_produced[i] = h2_prod[len(h2_prod) * electrolyzer[i] / P_max] #Actual hydrogen production at given average partial load
+            H2_storage = [x + H2_produced[i] if j > index_max[-1] else x for j,x in enumerate(H2_storage)] # Increases storage for all indices after the last time the storage is full 
+         elif FCR_U == True and FCR_D == False:         #Gällande ovan rad, P_bau ska kanske vara tidigare stegs effekt P_ele [i-1]?
+             if P_pv[i1+i] >= GRÄNS (från lager): # Gränsvärde för att undvika kallstarter om P_pv = 0.
+                 P_reserved[i] = - (P_bau[i] - P_pv[i1+i]) #Reglerar ned så mycket som möjligt, med P_pv som undre gräns. Negativ för att indikera minskning
+                 Income_flex[i] = abs(P_reserved[i] * FCR_U_prize[i1+i]) #Income is positive
+                 E_activated[i] = P_reserved[i] * Flex_frac_FCR_U[i1+i] # Negative as it's a reduction in used energy
+                 electrolyzer[i] = P_bau[i] + E_activated[i] #Average electrolyzer power usage for the hour
+                 H2_index = len(h2_prod) * electrolyzer[i] / P_max #Used for finding hydrogen production at specific average partial load
+                 H2_produced[i] = h2_prod[H2_index] 
+                 H2_storage = [x + H2_produced[i] if j>= i else x for j,x in enumerate(H2_storage)] #Adds to all future storage, not retroactively
+             else: #P_pv[i1+1] < GRÄNS
+                 P_reserved[i] = - (P_bau[i] - GRÄNS) #Negative as it regulates down
+                 Income_flex[i] = abs(P_reserved[i] * FCR_U_prize[i1+i])
+                 E_activated[i] = P_reserved[i] * Flex_frac_FCR_U[i1+i] # Negative as it's a reduction in used energy
+                 electrolyzer[i] = P_bau[i] + E_activated[i] #Average electrolyzer power usage for the hour
+                 H2_produced[i] = h2_prod[len(h2_prod) * electrolyzer[i] / P_max] # Actual hydrogen production at given average partial load  
+                 H2_storage = [x + E_activated[i] * factor(h2_prod) if j>= i else x for j,x in enumerate(H2_storage)] #Adds to all future storage, not retroactively
+        else:
+              electrolyzer[i] = P_bau[i] #Om inte på stödtjänstmarknaden gäller business as usual
+          
+    else: #Branch 2, implicit H2_storage[i] < H2_demand[i]
+        if FCR_D == True and FCR_U == False:
+            #Styrningen kommer nog se till att metaniseringsbehovet alltid täcks, så P_bau räcker i basfallet
+            # Ska denna vara nästan samma som FCR_D i första grenen?
+            H2_max[i] = h2st_size_vector[0] + H2_demand[i] - H2_storage[i] # Maximum possible hourly increase in hydrogen production [kg]
+            if H2_max[i] in h2_prod: #Checks if the theoretical maximum hydrogen production is possible in this system
+                H2_index = [k for k,x in enumerate(H2_prod) if H2_max[i] == H2_prod[k]] #Finds the index where the produced hydrogen is the same, requires uniqe values(?)
+                P_H2_max = H2_index[0]+1 / len(h2_prod) * P_max
+            else:
+                P_H2_max = P_max #Otherwise upper technical limit
+            deltaP_max[i] = P_H2_max - P_bau[i]
+            P_reserved[i] = deltaP_max[i] # Maximum possible power reserved as frequency regulation
+            Income_flex[i] = P_reserved[i] * FCR_D_price[i1+i]
+            E_activated[i] = deltaP_max[i] * Flex_frac_FCR_D[i1+i] 
+            electrolyzer[i] = P_bau[i] + E_activated[i] #Average electrolyzer power usage for the hour
+            H2_produced[i] = h2_prod[len(h2_prod) * electrolyzer[i] / P_max]
+            H2_storage = [x + H2_produced[i] if j > index_max[-1] else x for j,x in H2_storage] # Increases storage for all indices after the last time the storage is full 
+        
+        elif FCR_U == True and FCR_D == False:
+            H2_max[i] = H2_demand[i] - H2_storage[i] #Ska kanske heta H2_min?
+            H2_index = [k for k,x in enumerate(H2_prod) if H2_max[i] == H2_prod[k]]
+            P_H2_max = P_max * (H2_index[0]+1) / len(h2_prod) 
+            if P_H2_max < P_pv[i1+1] and P_pv[i1+i] >= GRÄNS:
+                deltaP_max[i] = P_pv[i1+i]
+            elif P_H2_max < GRÄNS and P_pv[i1+i] < GRÄNS:
+                deltaP_max[i] = GRÄNS
+            else:
+                deltaP_max[i] = P_H2_max  # The minimal electrolyzer power that leaves h2_storage non-negative (at zero)
+            P_reserved[i] = -(P_bau[i] - deltaP_max[i])
+            Income_flex[i] = abs(P_reserved[i] * FCR_U_prize[i1+i])
+            E_activated[i] = P_reserved[i] * Flex_frac_FCR_U[i1+i]
+            electrolyzer[i] = P_bau[i] + E_activated[i] #Average electrolyzer power usage for the hour
+            H2_produced[i] = h2_prod[len(h2_prod) * electrolyzer[i] / P_max] # Actual hydrogen production at given average partial load  
+            H2_storage = [x + H2_produced[i] if j>= i else x for j,x in enumerate(H2_storage)] #Adds to all future storage, not retroactively
+    
+        else:
+            electrolyzer[i] = P_bau[i]
+return electrolyzer, Income_flex, E_activated, H2_storage    #Används senare till beräkningar
 
 # %%
 pwl_points = 10000
@@ -210,7 +215,9 @@ H2_produced = h2_prod[index]
 
 # %%
 
-for i in range(len(test)):
+if test[4] in test3:
+    test[0] = 1
+else: test[0] = 0
         
 # %%
 

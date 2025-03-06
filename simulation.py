@@ -104,7 +104,9 @@ else:
 """ Run optimization """
 for e in range(len(elz_size_vector)):
     pem = params.Electrolyzer(elz_size_vector[e]) # Create electrolyzer
-    pem.efficiency('No plot') # Create electrolyzer efficiency curve
+    pem.efficiency('No plot', 10) # Create electrolyzer efficiency curve
+    pem2 = params.Electrolyzer(elz_size_vector[e]) #Alternate electrolyzer for efficiency curve
+    pem2.efficiency('No plot', 10000) # For the purpose of higher resolution H2-efficiency
     for m in range(len(meth_scale_vector)):
         meth = params.Methanation(meth_scale_vector[m], biogas.min_co2) # Create methanation reactor
         bg_comp = params.Compressor(meth.flow_max/3600, meth.pres, biogas.pres, biogas.temp) # Create biogas compressor
@@ -186,6 +188,7 @@ for e in range(len(elz_size_vector)):
                         
                         h2_storage_list_prev = np.roll(h2_storage_list, 1) # Creating previous hour storage array
                         h2_storage_list_prev[0] = 0
+                        
                         # Simons dispatch kan komma in här
                         """ Hourly operation based on dispatch """
                         # Number of cold starts
