@@ -505,8 +505,8 @@ class Renewables():
         self.wind_size = wind_size
         self.pv_size = pv_size
         
-        wind_read = r'\\storage.slu.se\Home$\enls0001\My Documents\GitHub\integrated-ptg-model\integrated_p2g\Data\RES\wind (Uppsala).xlsx' # Reading Excel data
-        pv_read = r'\\storage.slu.se\Home$\enls0001\My Documents\GitHub\integrated-ptg-model\integrated_p2g\Data\RES\solar (Uppsala).xlsx'
+        wind_read = r'C:\Users\Simon\Documents\Uppsala\Exjobb\wind (Uppsala).xlsx' # Reading Excel data
+        pv_read = r'C:\Users\Simon\Documents\Uppsala\Exjobb\solar (Uppsala).xlsx'
         if year == 2020:
             try:
                 self.wind_gen = np.array(pd.read_excel(wind_read) * (wind_size/3000))[0:8784,0] # Saving data
@@ -627,7 +627,7 @@ class Biogas():
                 co2_rate = ch4_rate * (comp[1]/comp[0]) # Carbon dioxide flow rate [mol/h]
         elif data == "real":
             # bg_read = r'C:\Users\enls0001\Anaconda3\Lib\site-packages\P2G\Data\Biogas flow.xlsx' # Reading data
-            bg_read = r'\\storage.slu.se\Home$\enls0001\My Documents\GitHub\integrated-ptg-model\integrated_p2g\Data\Biogas flow.xlsx' # Reading data
+            bg_read = r'C:\Users\Simon\Documents\Uppsala\Exjobb\Biogas flow.xlsx' # Reading data
             # \\storage.slu.se\Home$\enls0001\My Documents\GitHub\integrated-ptg-model\integrated_p2g\Data
             try:
                 bg_data = pd.read_excel(bg_read)
@@ -723,7 +723,7 @@ class Heat():
             
         """
         if data == 'real' or data == 'Real':
-            heat_read = r'\\storage.slu.se\Home$\enls0001\My Documents\GitHub\integrated-ptg-model\integrated_p2g\Data\Heat demand.xlsx'
+            heat_read = r'C:\Users\Simon\Documents\Uppsala\Exjobb\Heat demand.xlsx'
             try:
                 total_heat = pd.read_excel(heat_read).iloc[:,0] * self.scale
                 digester_heat = pd.read_excel(heat_read).iloc[:,1] * self.scale
@@ -818,7 +818,7 @@ class Oxygen():
             
         """
         if data == 'real' or data == 'Real':
-            o2_read = r'\\storage.slu.se\Home$\enls0001\My Documents\GitHub\integrated-ptg-model\integrated_p2g\Data\O2 flow.xlsx'
+            o2_read = r'C:\Users\Simon\Documents\Uppsala\Exjobb\O2 flow.xlsx'
             try:
                 o2_data = pd.read_excel(o2_read).iloc[:,0] * self.scale
             except FileNotFoundError:
@@ -1081,11 +1081,11 @@ class Grid():
             Hourly marginal emission factors in the specified bidding zone and year [kgCO2/MWh].
 
         """
-        spot_read = r'\\storage.slu.se\Home$\enls0001\My Documents\GitHub\integrated-ptg-model\integrated_p2g\Data\Elspot\elspot prices ' + str(year) + '.xlsx'
+        spot_read = r'C:\Users\Simon\Documents\Uppsala\Exjobb\elspot prices ' + str(year) + '.xlsx'
         spot_price = pd.read_excel(spot_read) + self.fee
         self.spot_price = np.array(spot_price[zone].tolist()) # Grid prices
         
-        efs_read = r'\\storage.slu.se\Home$\enls0001\My Documents\GitHub\integrated-ptg-model\integrated_p2g\Data\EFs\efs_' + str(zone) + '_' + str(year) + '.xlsx'
+        efs_read = r'C:\Users\Simon\Documents\Uppsala\Exjobb\efs_' + str(zone) + '_' + str(year) + '.xlsx'
         efs = pd.read_excel(efs_read)
         self.aefs = np.array(efs.iloc[:,0])
         self.mefs = np.array(efs.iloc[:,1]) 

@@ -13,6 +13,7 @@ import components as comps
 import other
 import dispatch
 import plotting
+import styrning
 import matplotlib.pyplot as plt
 from matplotlib import rc
 from tabulate import tabulate
@@ -105,8 +106,9 @@ else:
 for e in range(len(elz_size_vector)):
     pem = params.Electrolyzer(elz_size_vector[e]) # Create electrolyzer
     pem.efficiency('No plot', 10) # Create electrolyzer efficiency curve
-    pem2 = params.Electrolyzer(elz_size_vector[e]) #Alternate electrolyzer for efficiency curve
-    pem2.efficiency('No plot', 10000) # For the purpose of higher resolution H2-efficiency
+    # pem2 = params.Electrolyzer(elz_size_vector[e]) #Alternate electrolyzer for efficiency curve
+    # pem2.efficiency('No plot', 10000) # For the purpose of higher resolution H2-efficiency
+    # FCR_data = styrning.FCR_data(hrs)
     for m in range(len(meth_scale_vector)):
         meth = params.Methanation(meth_scale_vector[m], biogas.min_co2) # Create methanation reactor
         bg_comp = params.Compressor(meth.flow_max/3600, meth.pres, biogas.pres, biogas.temp) # Create biogas compressor
@@ -150,6 +152,9 @@ for e in range(len(elz_size_vector)):
                         electrolyzer_standby = np.zeros(len(grid.spot_price))
                         battery_state = np.zeros(len(grid.spot_price))
                         sys_op = np.zeros(len(grid.spot_price))
+                        #Also for flexibility
+                        Income_flex = np.zeros(len(grid.spot_price))
+                        E_activated = np.zeros(len(grid.spot_price))
                         
                         """ Daily electrolyzer dispatch on day-ahead market """
                         for d in range(int(hrs/24)): # Simulating on a daily basis
@@ -186,6 +191,14 @@ for e in range(len(elz_size_vector)):
                             bat_storage = battery_state[-1]
                             sys_op[i1:i2] = elz_dispatch.iloc[:,24]
                         
+                            # flex_dispatch = styrning.styrning2_alt(i1=i1, H2_demand=h2_demand_kg[i1:i2], H2_storage=h2_storage_list[i1:i2], h2st_size_vector=h2st_size_vector, P_bau=electrolyzer[i1:i2], P_pv=res.pv_gen[i1:i2], P_max=elz_size_vector[0], h2_prod=pem2.h2_prod, FCR_D=True, FCR_U=False, FCR_N=False, Flex_frac_FCR_D=FCR_data[0], Flex_frac_FCR_U=FCR_data[1], FCR_D_power=FCR_data[3], FCR_D_price=FCR_data[4], FCR_U_power=FCR_data[5], FCR_U_prize=FCR_data[6])
+                            
+                            # #Updates previous values in accordance with flexibility behaviour
+                            # electrolyzer[i1:i2] = flex_dispatch[0]
+                            # Income_flex[i1:i2] = flex_dispatch[1]
+                            # E_activated[i1:i2] = flex_dispatch[2]
+                            # h2_storage_list[i1:i2] = flex_dispatch[3]
+                            
                         h2_storage_list_prev = np.roll(h2_storage_list, 1) # Creating previous hour storage array
                         h2_storage_list_prev[0] = 0
                         
