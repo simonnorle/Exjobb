@@ -10,7 +10,27 @@ import numpy as np
 import pandas as pd
 import parameters as param
 
+from bisect import bisect_left
 
+def take_closest(myList, myNumber):
+    """
+    Assumes myList is sorted. Returns closest value to myNumber.
+
+    If two numbers are equally close, return the smallest number.
+    """
+    pos = bisect_left(myList, myNumber)
+    if pos == 0:
+        return myList[0]
+    if pos == len(myList):
+        return myList[-1]
+    before = myList[pos - 1]
+    after = myList[pos]
+    if after - myNumber < myNumber - before:
+        return after
+    else:
+        return before
+    
+    
 # Alternativ formulering som beräknar för alla timmar för en dag, designad för att anropas på rad 189 i simulation.py
 def styrning2_alt(
         i1: int, # Int, first hour of the day relative to the entire year
@@ -49,13 +69,17 @@ def styrning2_alt(
         FCR_D = FCR_D_orginal #Resets boolean value to the imput value
         FCR_U = FCR_U_orginal
         index_max = [j for j,x in enumerate(H2_storage) if x >= h2st_size_vector[0]] #Returns list of indices where the storage is full
-        FCR_D = False if i <= index_max[-1] else FCR_D # Disables FCR-D down as long as the planned storage is full, enables FCR-D down once the storage won't be full for the rest of the day
-        
+        #FCR_D = False if bool(index_max) == True and i <= index_max[-1] else FCR_D # Disables FCR-D down as long as the planned storage is full, enables FCR-D down once the storage won't be full for the rest of the day
+        if bool(index_max) == True and i <= index_max[-1]:
+            FCR_D = False
+        else:
+            FCR_D = FCR_D_orginal
         if H2_storage[i] >= H2_demand[i]: #Branch 1
-            FCR_D = False if H2_storage[i] == h2st_size_vector[0] else FCR_D #Borde fungera som en rad, No increased production if the storage is full
+            FCR_D = False if H2_storage[i] == h2st_size_vector[0] else FCR_D == FCR_D_orginal #Borde fungera som en rad, No increased production if the storage is full
             if FCR_D == True and FCR_U == False: #Behöver det finnas en övre gräns för P_ele (finns realistiskt iaf)?
                 H2_max[i] = h2st_size_vector[0] + H2_storage[i] - H2_demand[i] ##Alternativt uttryck från vätgasbalans
-                H2_index = [k for k,x in enumerate(h2_prod) if H2_max[i] == h2_prod[k]] #Finds the index where the produced hydrogen is the same, requires uniqe values(?)
+                H2_closest = take_closest(h2_prod, H2_max[i])
+                H2_index = [k for k,x in enumerate(h2_prod) if H2_closest == h2_prod[k]] #Finds the index where the produced hydrogen is the same, requires uniqe values(?)
                 P_H2_max = P_max * (H2_index[0]+1) / len(h2_prod) 
                 # P_H2_max = ([k for k,x in enumerate(h2_prod) if H2_max[i] == h2_prod[k]]+1)/len(h2_prod)*P_max #Alternativ omskrivning
                 deltaP_max[i] = P_H2_max - P_bau[i]
@@ -63,8 +87,8 @@ def styrning2_alt(
                 Income_flex[i] = P_reserved[i] * FCR_D_price[i1+i]
                 P_activated[i] = deltaP_max[i] * Flex_frac_FCR_D[i1+i] 
                 electrolyzer[i] = P_bau[i] + P_activated[i]
-                H2_flex[i] = h2_prod[len(h2_prod) * electrolyzer[i] / P_max] #Hydrogen production at given average partial load
-                H2_bau[i] = h2_prod[len(h2_prod) * P_bau[i] / P_max] #Hydrogen production at planned average electrolyzer power
+                H2_flex[i] = h2_prod[round(len(h2_prod) * electrolyzer[i] / P_max)] #Hydrogen production at given average partial load
+                H2_bau[i] = h2_prod[round(len(h2_prod) * P_bau[i] / P_max)] #Hydrogen production at planned average electrolyzer power
                 H2_produced[i] = H2_flex[i] - H2_bau[i] #Actual additional hydrogen production from flexibility behaviour, this method takes correct measures to partial load efficiencies 
                 H2_storage = [x + H2_produced[i] if j > index_max[-1] else x for j,x in enumerate(H2_storage)] # Increases storage for all indices after the last time the storage is full 
             elif FCR_U == True and FCR_D == False:         #Gällande ovan rad, P_bau ska kanske vara tidigare stegs effekt P_ele [i-1]?
@@ -73,8 +97,8 @@ def styrning2_alt(
                      Income_flex[i] = abs(P_reserved[i] * FCR_U_prize[i1+i]) #Income is positive
                      P_activated[i] = P_reserved[i] * Flex_frac_FCR_U[i1+i] # Negative as it's a reduction in used energy
                      electrolyzer[i] = P_bau[i] + P_activated[i] #Average electrolyzer power usage for the hour
-                     H2_flex[i] = h2_prod[len(h2_prod) * electrolyzer[i] / P_max] #Hydrogen production at given average partial load
-                     H2_bau[i] = h2_prod[len(h2_prod) * P_bau[i] / P_max] #Hydrogen production at planned average electrolyzer power
+                     H2_flex[i] = h2_prod[round(len(h2_prod) * electrolyzer[i] / P_max)] #Hydrogen production at given average partial load
+                     H2_bau[i] = h2_prod[round(len(h2_prod) * P_bau[i] / P_max)] #Hydrogen production at planned average electrolyzer power
                      H2_produced[i] = H2_flex[i] - H2_bau[i] #Actual additional hydrogen production from flexibility behaviour, this method takes correct measures to partial load efficiencies 
                      H2_storage = [x + H2_produced[i] if j>= i else x for j,x in enumerate(H2_storage)] #Adds to all future storage, not retroactively
                  else: #P_pv[i1+1] < GRÄNS
@@ -83,8 +107,8 @@ def styrning2_alt(
                      P_activated[i] = P_reserved[i] * Flex_frac_FCR_U[i1+i] # Negative as it's a reduction in used energy
                      electrolyzer[i] = P_bau[i] + P_activated[i] #Average electrolyzer power usage for the hour
                      H2_produced[i] = h2_prod[len(h2_prod) * electrolyzer[i] / P_max] # Actual hydrogen production at given average partial load  
-                     H2_flex[i] = h2_prod[len(h2_prod) * electrolyzer[i] / P_max] #Hydrogen production at given average partial load
-                     H2_bau[i] = h2_prod[len(h2_prod) * P_bau[i] / P_max] #Hydrogen production at planned average electrolyzer power
+                     H2_flex[i] = h2_prod[round(len(h2_prod) * electrolyzer[i] / P_max)] #Hydrogen production at given average partial load
+                     H2_bau[i] = h2_prod[round(len(h2_prod) * P_bau[i] / P_max)] #Hydrogen production at planned average electrolyzer power
                      H2_produced[i] = H2_flex[i] - H2_bau[i] #Actual additional hydrogen production from flexibility behaviour, this method takes correct measures to partial load efficiencies 
                      H2_storage = [x + P_activated[i] * H2_produced[i] if j>= i else x for j,x in enumerate(H2_storage)] #Adds to all future storage, not retroactively
             else:
@@ -95,8 +119,10 @@ def styrning2_alt(
                 #Styrningen kommer nog se till att metaniseringsbehovet alltid täcks, så P_bau räcker i basfallet
                 # Ska denna vara nästan samma som FCR_D i första grenen?
                 H2_max[i] = h2st_size_vector[0] + H2_demand[i] - H2_storage[i] # Maximum possible hourly increase in hydrogen production [kg]
-                if H2_max[i] in h2_prod: #Checks if the theoretical maximum hydrogen production is possible in this system
-                    H2_index = [k for k,x in enumerate(h2_prod) if H2_max[i] == h2_prod[k]] #Finds the index where the produced hydrogen is the same, requires uniqe values(?)
+                
+                if H2_max[i] <= max(h2_prod): #Checks if the theoretical maximum hydrogen production is possible in this system
+                    H2_closest = take_closest(h2_prod, H2_max[i])
+                    H2_index = [k for k,x in enumerate(h2_prod) if H2_closest == h2_prod[k]] #Finds the index where the produced hydrogen is the same, requires uniqe values(?)
                     P_H2_max = H2_index[0]+1 / len(h2_prod) * P_max
                 else:
                     P_H2_max = P_max #Otherwise upper technical limit
@@ -105,14 +131,15 @@ def styrning2_alt(
                 Income_flex[i] = P_reserved[i] * FCR_D_price[i1+i]
                 P_activated[i] = deltaP_max[i] * Flex_frac_FCR_D[i1+i] 
                 electrolyzer[i] = P_bau[i] + P_activated[i] #Average electrolyzer power usage for the hour
-                H2_flex[i] = h2_prod[len(h2_prod) * electrolyzer[i] / P_max] #Hydrogen production at given average partial load
-                H2_bau[i] = h2_prod[len(h2_prod) * P_bau[i] / P_max] #Hydrogen production at planned average electrolyzer power
+                H2_flex[i] = h2_prod[round(len(h2_prod) * electrolyzer[i] / P_max)] #Hydrogen production at given average partial load
+                H2_bau[i] = h2_prod[round(len(h2_prod) * P_bau[i] / P_max)] #Hydrogen production at planned average electrolyzer power
                 H2_produced[i] = H2_flex[i] - H2_bau[i] #Actual additional hydrogen production from flexibility behaviour, this method takes correct measures to partial load efficiencies 
                 H2_storage = [x + H2_produced[i] if j > index_max[-1] else x for j,x in H2_storage] # Increases storage for all indices after the last time the storage is full 
             
             elif FCR_U == True and FCR_D == False:
                 H2_max[i] = H2_demand[i] - H2_storage[i] #Ska kanske heta H2_min?
-                H2_index = [k for k,x in enumerate(h2_prod) if H2_max[i] == h2_prod[k]]
+                H2_closest = take_closest(h2_prod, H2_max[i])
+                H2_index = [k for k,x in enumerate(h2_prod) if H2_closest == h2_prod[k]] #Finds the index where the produced hydrogen is the same, requires uniqe values(?)
                 P_H2_max = P_max * (H2_index[0]+1) / len(h2_prod) 
                 if P_H2_max < P_pv[i1+1] and P_pv[i1+i] >= GRÄNS:
                     deltaP_max[i] = P_pv[i1+i]
@@ -124,8 +151,8 @@ def styrning2_alt(
                 Income_flex[i] = abs(P_reserved[i] * FCR_U_prize[i1+i])
                 P_activated[i] = P_reserved[i] * Flex_frac_FCR_U[i1+i]
                 electrolyzer[i] = P_bau[i] + P_activated[i] #Average electrolyzer power usage for the hour
-                H2_flex[i] = h2_prod[len(h2_prod) * electrolyzer[i] / P_max] #Hydrogen production at given average partial load
-                H2_bau[i] = h2_prod[len(h2_prod) * P_bau[i] / P_max] #Hydrogen production at planned average electrolyzer power
+                H2_flex[i] = h2_prod[round(len(h2_prod) * electrolyzer[i] / P_max)] #Hydrogen production at given average partial load
+                H2_bau[i] = h2_prod[round(len(h2_prod) * P_bau[i] / P_max)] #Hydrogen production at planned average electrolyzer power
                 H2_produced[i] = H2_flex[i] - H2_bau[i] #Actual additional hydrogen production from flexibility behaviour, this method takes correct measures to partial load efficiencies 
                 H2_storage = [x + H2_produced[i] if j>= i else x for j,x in enumerate(H2_storage)] #Adds to all future storage, not retroactively
         
@@ -135,8 +162,19 @@ def styrning2_alt(
 
 
 # %%
-
-
+import numpy as np
+import pandas as pd
+import parameters as param
+pem2 = param.Electrolyzer(10) #Alternate electrolyzer for efficiency curve
+pem2.efficiency('No plot', 10000) # For the purpose of higher resolution H2-efficiency
+FCR_read = r'C:\Users\Simon\Documents\Uppsala\Exjobb\FCR_2021.xlsx' #Onödigt att läsa in dessa hela tiden, kanske flytta utanför?
+FCR_D_power = np.array(pd.read_excel(FCR_read,usecols="T",skiprows=0))
+FCR_U_power = np.array(pd.read_excel(FCR_read,usecols="M",skiprows=0))
+FCR_D_price = np.array(pd.read_excel(FCR_read,usecols="P",skiprows=0))
+FCR_U_price = np.array(pd.read_excel(FCR_read,usecols="I",skiprows=0))
+#FCR_N_power = np.array(pd.read_excel(FCR_read,usecols="F",skiprows=0))
+#FCR_N_price = np.array(pd.read_excel(FCR_read,usecols="B",skiprows=0))
+test = styrning2_alt(i1=0, H2_demand=[50]*24, H2_storage=[150]*24, h2st_size_vector=[300], P_bau=[5]*24, P_pv=[0.5]*24, P_max=10, h2_prod=pem2.h2_prod, FCR_D=True, FCR_U=True, FCR_N=False, Flex_frac_FCR_D = [0.1]*24, Flex_frac_FCR_U=[0]*24, FCR_D_power=FCR_D_power, FCR_D_price=FCR_D_price, FCR_U_power=FCR_U_power, FCR_U_prize=FCR_U_price)
 # %% 
 
 def FCR_data(
@@ -146,7 +184,7 @@ def FCR_data(
     FCR_D_power = np.array(pd.read_excel(FCR_read,usecols="T",skiprows=0))
     FCR_U_power = np.array(pd.read_excel(FCR_read,usecols="M",skiprows=0))
     FCR_D_price = np.array(pd.read_excel(FCR_read,usecols="P",skiprows=0))
-    FCR_U_prize = np.array(pd.read_excel(FCR_read,usecols="I",skiprows=0))
+    FCR_U_price = np.array(pd.read_excel(FCR_read,usecols="I",skiprows=0))
     FCR_N_power = np.array(pd.read_excel(FCR_read,usecols="F",skiprows=0))
     FCR_N_price = np.array(pd.read_excel(FCR_read,usecols="B",skiprows=0))
     Freq_data = r'C:\Users\Simon\Documents\Uppsala\Exjobb\Frequency data 2021 (3min).xlsx'
@@ -173,7 +211,7 @@ def FCR_data(
         FCR_D_count = 0
         FCR_U_count = 0 #Resets counters
         FCR_N_count = 0 
-    return Flex_frac_FCR_D, Flex_frac_FCR_U, Flex_frac_FCR_N, FCR_D_power, FCR_D_price, FCR_U_power, FCR_U_prize, FCR_N_power, FCR_N_price
+    return Flex_frac_FCR_D, Flex_frac_FCR_U, Flex_frac_FCR_N, FCR_D_power, FCR_D_price, FCR_U_power, FCR_U_price, FCR_N_power, FCR_N_price
 
 # %%
 import numpy as np
