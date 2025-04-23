@@ -50,22 +50,29 @@ Updated version of the model used in Engstam et al., 2025.
     - Reworked code structure and documentation.
 """
 
-# start = time.time()
+start = time.time()
 
 """ Optimization parameters """
-elz_size_vector = [8.5]#[6,6.5,7,7.5,8,8.5,9,9.5,10,10.5,11,11.5,12] # [MW]
+elz_size_vector = [9.5,10] #[6,6.5,7,7.5,8,8.5,9,9.5,10,10.5,11,11.5,12] # [MW]
 meth_scale_vector = [5]#[3.5,4,4.5,5] # [MWCH4]
-h2st_size_vector = [300]#[0,100,200,300,400,500,600,700,800,900,1000] # [kg]
+h2st_size_vector = [200]#[0,100,200,300,400,500,600,700,800,900,1000] # [kg]
 wind_size_vector = [1.25] # [ratio to elz]
 pv_size_vector = [1.25] # [ratio to elz]
 bat_size_vector = [0] # [MWh]
+income_frac_vector = [100] #[0,25,50,75,100] # %
 
 """ Simulation parameters """
 year = 2021 # 2018-2021 available
 bidding_zone = 'SE3' # ['SE1', 'SE2', 'SE3', 'SE4']
 simulation_details = 'No' # ['Yes', 'No'] A "Process" dataframe with all process stages during all hours is created.
 plots = 'No' # ['Yes', 'No']
-
+min_h2st_use = 0.15 #Minimum fraction of the hydrogen storage that is used by the day-ahead optimizer, leaving more room for flexibility
+max_h2st_use = 0.85 #Maximum fraction of the hydrogen storage that is used by the day-ahead optimizer, leaving more room for flexibility
+min_max_h2st_use = str(min_h2st_use) +" - " + str(max_h2st_use)
+#preread_flex_frac = 'Yes' # ['Yes', 'No'] If the frequency calculations in styrning.Flex_frac_to_excel() has already been run
+activation_duration = 20 # [minutes] Worst-case activation duration for the flexibility resources 
+Flex_resources = 'Yes' #['Yes', 'No'] #Determines if flexibility resources are to be applied
+version = "v8"
 """ Creating component classes for variable storage in components """
 tec = params.TechnoEconomics(hv='hhv', lifetime=20, discount=8) # Techno-economic parameters
 biogas = params.Biogas(data='real', year=year) # Biogas production
@@ -77,7 +84,7 @@ o2 = params.Oxygen(year=year, data='real') # Oxygen utilization system
 heat = params.Heat(year=year, data='real') # Heat utilization system
 
 """ Define run-type """
-if len(elz_size_vector) == 1 and len(meth_scale_vector) == 1 and len(h2st_size_vector) == 1 and len(wind_size_vector) == 1 and len(pv_size_vector) == 1 and len(bat_size_vector) == 1:
+if len(elz_size_vector) == 1 and len(meth_scale_vector) == 1 and len(h2st_size_vector) == 1 and len(wind_size_vector) == 1 and len(pv_size_vector) == 1 and len(bat_size_vector) == 1 and len(income_frac_vector) == 1:
     run_type = 'single'
     cost_breakdown = pd.DataFrame({'Costs': ['Electrolyser','Stack','Water','Storage','Meth','Comp','Heat','O2','Installation','Flaring','Grid','PV','Wind','Curtailment','O2 income','Heat income','Total']}).set_index('Costs')
     
@@ -94,7 +101,8 @@ else:
     sims = len(elz_size_vector) * len(h2st_size_vector) * len(wind_size_vector) * len(pv_size_vector) * len(meth_scale_vector) * len(bat_size_vector)
     count = 0 # Defining counting variables
     # Defining results dataframe
-    results = pd.DataFrame({'KPIs': ['LCOP2G (curt)', 'LCOP2G', 'MSP', 'MSP (no curt)', 'Gas eff.', 'Heat eff.', 'Tot eff.', 'AEF net', 'MEF net', 'Starts', 'Standby', 'FLHs', 'Loss [%]', 'O2 util.', 'O2 dem.', 'Heat util', 'Heat dem.', 'RES [%]', 'LCOP2G BY diff.', 'LCOP2G BY rel.', 'MSP BY diff.', 'MSP BY rel.', 'NPV O2', 'NPV HEAT']}).set_index('KPIs')
+    #results = pd.DataFrame({'KPIs': ['LCOP2G (curt)', 'LCOP2G', 'MSP', 'MSP (no curt)', 'Gas eff.', 'Heat eff.', 'Tot eff.', 'AEF net', 'MEF net', 'Starts', 'Standby', 'FLHs', 'Loss [%]', 'O2 util.', 'O2 dem.', 'Heat util', 'Heat dem.', 'RES [%]', 'LCOP2G BY diff.', 'LCOP2G BY rel.', 'MSP BY diff.', 'MSP BY rel.', 'NPV O2', 'NPV HEAT']}).set_index('KPIs')
+    results = pd.DataFrame({'KPIs': ['LCOP2G (curt)', 'LCOP2G', 'MSP', 'MSP (no curt)', 'Gas eff.', 'Heat eff.', 'Tot eff.', 'AEF net', 'MEF net', 'Starts', 'Standby', 'FLHs', 'Loss [%]', 'O2 util.', 'O2 dem.', 'Heat util', 'Heat dem.', 'RES [%]', 'LCOP2G BY diff.', 'LCOP2G BY rel.', 'P_res_max', 'P_res_min', 'Income_flex', 'Unmet demand', 'H2_overflow', 'H2_underflow']}).set_index('KPIs')
 
 """ Defining additional simulation parameters """
 if year == 2020: # Number of hours during the specified year
@@ -106,9 +114,13 @@ else:
 for e in range(len(elz_size_vector)):
     pem = params.Electrolyzer(elz_size_vector[e]) # Create electrolyzer
     pem.efficiency('No plot', 10) # Create electrolyzer efficiency curve
-    # pem2 = params.Electrolyzer(elz_size_vector[e]) #Alternate electrolyzer for efficiency curve
-    # pem2.efficiency('No plot', 10000) # For the purpose of higher resolution H2-efficiency
-    # FCR_data = styrning.FCR_data(hrs)
+    if Flex_resources == 'Yes':
+        pem2 = params.Electrolyzer(elz_size_vector[e]) #Alternate electrolyzer for efficiency curve
+        pem2.efficiency('No plot', 10000) # For the purpose of higher resolution H2-efficiency
+        FCR_start_time = time.time()
+        FCR_data = styrning.FCR_data(year=year)
+        FCR_end_time = time.time()
+        print("FCR time: "+str(FCR_end_time-FCR_start_time))
     for m in range(len(meth_scale_vector)):
         meth = params.Methanation(meth_scale_vector[m], biogas.min_co2) # Create methanation reactor
         bg_comp = params.Compressor(meth.flow_max/3600, meth.pres, biogas.pres, biogas.temp) # Create biogas compressor
@@ -127,8 +139,10 @@ for e in range(len(elz_size_vector)):
                     pv_size = pv_size_vector[p] * pem.size # Define PV capacity
                     res.pv_gen *= pv_size / res.pv_size # Update PV generation using new capacity
                     res.pv_size = pv_size # Update PV size
-                    for b in range(len(bat_size_vector)):
-                        bat.size = bat_size_vector[b] # Define battery capacity
+                    
+                    for f in range(len(income_frac_vector)):
+                    #for b in range(len(bat_size_vector)):
+                    #    bat.size = bat_size_vector[b] # Define battery capacity
                         
                         """ Initiate process simulation """
                         # Initial values for dynamic variables
@@ -153,11 +167,29 @@ for e in range(len(elz_size_vector)):
                         battery_state = np.zeros(len(grid.spot_price))
                         sys_op = np.zeros(len(grid.spot_price))
                         #Also for flexibility
-                        Income_flex = np.zeros(len(grid.spot_price))
-                        E_activated = np.zeros(len(grid.spot_price))
+                        if Flex_resources == 'Yes':
+                            Income_flex = np.zeros(len(grid.spot_price))
+                            E_activated = np.zeros(len(grid.spot_price))
+                            Branch = np.zeros(len(grid.spot_price))
+                            P_reserved = np.zeros(len(grid.spot_price))
+                            #För styrning3
+                            P_reserved_max = np.zeros(len(grid.spot_price))
+                            P_reserved_min = np.zeros(len(grid.spot_price))
+                            Branch_min = np.zeros(len(grid.spot_price))
+                            Branch_D = np.zeros(len(grid.spot_price))
+                            Branch_U = np.zeros(len(grid.spot_price))
+                            FCR_D_record = np.zeros(len(grid.spot_price))
+                            FCR_U_record = np.zeros(len(grid.spot_price))
+                            H2_produced = np.zeros(len(grid.spot_price))
+                            P_flex = np.zeros(len(grid.spot_price))
+                            elz_da = np.zeros(len(grid.spot_price))
+                            h2st_da = np.zeros(len(grid.spot_price))
+                            Unmet_demand = np.zeros(len(grid.spot_price))
+                            day_counter = 0
+                        
                         
                         """ Daily electrolyzer dispatch on day-ahead market """
-                        for d in range(int(hrs/24)): # Simulating on a daily basis
+                        for d in range(int(365)): # Simulating on a daily basis
                             # Specific hours during day "d"
                             i1 = d*24
                             i2 = i1 + 24
@@ -170,7 +202,7 @@ for e in range(len(elz_size_vector)):
                                     prev_mode = 0
                             
                             # Daily dispatch optimization
-                            elz_dispatch = dispatch.p2g_wwtp3(h2_dem=h2_demand_kg[i1:i2], heat_demand=heat.demand_tot[i1:i2], heat_value=heat.dh_price, usable_heat=heat.usable, meth_spec_heat=meth.spec_heat, o2_demand=o2.demand[i1:i2]*32/1000, o2_power=o2.aerator_savings, k_values=pem.k_values, m_values=pem.m_values, grid=grid.spot_price[i1:i2], wind=res.wind_gen[i1:i2], pv=res.pv_gen[i1:i2], elz_max=pem.size_degr, elz_min=pem.min_load*pem.size_degr, elz_eff=pem.n_sys, aux_cons=pem.aux_cons, meth_max=meth.size_mol*2.02*4/1000, meth_min=meth.min_load*meth.size_mol*4*2.02/1000, h2st_max=storage.size, h2st_prev=h2_storage, prev_mode=prev_mode, startup_cost=pem.start_cost, standby_cost=pem.standby_cost, bat_cap=bat.size, bat_eff=bat.eff, bat_prev=bat_storage, meth_el_factor=meth.spec_el, h2o_cons=pem.water_cons, temp=pem.temp, h2o_temp=pem.h2o_temp, biogas=biogas.flow[i1:i2], comp_el_factor=bg_comp.spec_el, elz_startup_time=pem.start_time/60)# wind_cost=wind_lcoe, pv_cost=pv_lcoe)
+                            elz_dispatch = dispatch.p2g_wwtp3(h2_dem=h2_demand_kg[i1:i2], heat_demand=heat.demand_tot[i1:i2], heat_value=heat.dh_price, usable_heat=heat.usable, meth_spec_heat=meth.spec_heat, o2_demand=o2.demand[i1:i2]*32/1000, o2_power=o2.aerator_savings, k_values=pem.k_values, m_values=pem.m_values, grid=grid.spot_price[i1:i2], wind=res.wind_gen[i1:i2], pv=res.pv_gen[i1:i2], elz_max=pem.size_degr, elz_min=pem.min_load*pem.size_degr, elz_eff=pem.n_sys, aux_cons=pem.aux_cons, meth_max=meth.size_mol*2.02*4/1000, meth_min=meth.min_load*meth.size_mol*4*2.02/1000, min_h2st_use=min_h2st_use, max_h2st_use=max_h2st_use, h2st_max=storage.size, h2st_prev=h2_storage, prev_mode=prev_mode, startup_cost=pem.start_cost, standby_cost=pem.standby_cost, bat_cap=bat.size, bat_eff=bat.eff, bat_prev=bat_storage, meth_el_factor=meth.spec_el, h2o_cons=pem.water_cons, temp=pem.temp, h2o_temp=pem.h2o_temp, biogas=biogas.flow[i1:i2], comp_el_factor=bg_comp.spec_el, elz_startup_time=pem.start_time/60)# wind_cost=wind_lcoe, pv_cost=pv_lcoe)
                                    
                             # Save daily data
                             electrolyzer[i1:i2] = elz_dispatch.iloc[:,0]
@@ -190,19 +222,57 @@ for e in range(len(elz_size_vector)):
                             h2_storage = h2_storage_list[-1]
                             bat_storage = battery_state[-1]
                             sys_op[i1:i2] = elz_dispatch.iloc[:,24]
+                            
+                            Unmet_demand[i1:i2] = elz_dispatch.iloc[:,9]
+                            if Flex_resources == 'Yes':
+                                # Extra kopia för jämförelse
+                                elz_da[i1:i2] = elz_dispatch.iloc[:,0]
+                                h2st_da[i1:i2] = elz_dispatch.iloc[:,5]
+                                
+                                
+                                Flex_frac_read = r'/Users/simonnorle/Documents/Uppsala - år 5/Exjobb/Python/Flex_frac_'+str(year)+'.xlsx'
+                                Flex_frac_FCR_D_full = np.array(pd.read_excel(Flex_frac_read, usecols="B",skiprows=0))
+                                Flex_frac_FCR_U_full = np.array(pd.read_excel(Flex_frac_read, usecols="C",skiprows=0))
+                                start_flex = time.time()
+                                flex_dispatch = styrning.styrning3(i1=i1, version=version, H2_demand=h2_demand_kg[i1:i2], H2_storage=h2_storage_list[i1:i2],H2_bau=h2_production[i1:i2], h2st_size_vector=h2st_size_vector, P_bau=electrolyzer[i1:i2], P_pv=res.pv_gen[i1:i2], P_max=pem2.size_degr, h2_prod=pem2.h2_prod, FCR_D=True, FCR_U=True, FCR_N=False, Flex_frac_FCR_D=Flex_frac_FCR_D_full[i1:i2], Flex_frac_FCR_U=Flex_frac_FCR_U_full[i1:i2], FCR_D_power=FCR_data[0], FCR_D_price=FCR_data[5], FCR_U_power=FCR_data[2], FCR_U_price=FCR_data[3], min_load = pem.min_load, activation_duration=activation_duration) #Egenligen är FCR_D_price = FCR_data[1], men ändras pga förlorad data
+                                end_flex = time.time()
+                                day_counter += 1
+                                print("Flex calculations time: "+str(end_flex-start_flex))
+                                print("Days calculated: " + str(day_counter))
+                                # if  preread_flex_frac == 'Yes': # If Flex_frac are already computed by styrning.Flex_frac_to_excel()
+                                #     Flex_frac_read = r'/Users/simonnorle/Documents/Uppsala - år 5/Exjobb/Python/Flex_frac_'+str(year)+'.xlsx'
+                                #     Flex_frac_FCR_D_full = np.array(pd.read_excel(Flex_frac_read, usecols="B",skiprows=0))
+                                #     Flex_frac_FCR_U_full = np.array(pd.read_excel(Flex_frac_read, usecols="C",skiprows=0))
+                                #     flex_dispatch = styrning.styrning3(i1=i1, H2_demand=h2_demand_kg[i1:i2], H2_storage=h2_storage_list[i1:i2], H2_bau=h2_production[i1:i2], h2st_size_vector=h2st_size_vector, P_bau=electrolyzer[i1:i2], P_pv=res.pv_gen[i1:i2], P_max=pem2.size_degr, h2_prod=pem2.h2_prod, FCR_D=True, FCR_U=True, FCR_N=False, Flex_frac_FCR_D=Flex_frac_FCR_D_full[i1:i2], Flex_frac_FCR_U=Flex_frac_FCR_U_full[i1:i2], FCR_D_power=FCR_data[0], FCR_D_price=FCR_data[5], FCR_U_power=FCR_data[2], FCR_U_price=FCR_data[3], min_load = pem.min_load, activation_duration=activation_duration) #Egenligen är FCR_D_price = FCR_data[1], men ändras pga förlorad data
+                                # else:
+                                #     #If Frequency is to be read for each day
+                                #     Frequency = styrning.Frequency(year=year, day=d)
+                                #     flex_dispatch = styrning.styrning3(i1=i1, H2_demand=h2_demand_kg[i1:i2], H2_storage=h2_storage_list[i1:i2], H2_bau=h2_production[i1:i2], h2st_size_vector=h2st_size_vector, P_bau=electrolyzer[i1:i2], P_pv=res.pv_gen[i1:i2], P_max=pem2.size_degr, h2_prod=pem2.h2_prod, FCR_D=True, FCR_U=True, FCR_N=False, Flex_frac_FCR_D=Frequency[0], Flex_frac_FCR_U=Frequency[1], FCR_D_power=FCR_data[0], FCR_D_price=FCR_data[5], FCR_U_power=FCR_data[2], FCR_U_price=FCR_data[3], min_load = pem.min_load, activation_duration=activation_duration) #Egenligen är FCR_D_price = FCR_data[1], men ändras pga förlorad data
+                                    
+                                #Updates previous values in accordance with flexibility behaviour
+                                electrolyzer[i1:i2] = flex_dispatch.iloc[:,0]
+                                P_flex[i1:i2] = flex_dispatch.iloc[:,0]
+                                Income_flex[i1:i2] = flex_dispatch.iloc[:,1]
+                                E_activated[i1:i2] = flex_dispatch.iloc[:,2]
+                                h2_storage_list[i1:i2] = flex_dispatch.iloc[:,3]
+                                h2_storage = h2_storage_list[-1]
+                                #Branch[i1:i2] = flex_dispatch.iloc[:,6]
+                                #P_reserved[i1:i2] = flex_dispatch.iloc[:,4]
+                                
+                                #Additional data saving for styrning3
+                                P_reserved_max[i1:i2] = flex_dispatch.iloc[:,4]
+                                P_reserved_min[i1:i2] = flex_dispatch.iloc[:,5]
+                                Branch_min[i1:i2] = flex_dispatch.iloc[:,6]
+                                Branch_D[i1:i2] = flex_dispatch.iloc[:,7]
+                                Branch_U[i1:i2] = flex_dispatch.iloc[:,8]
+                                FCR_D_record[i1:i2] = flex_dispatch.iloc[:,9]
+                                FCR_U_record[i1:i2] = flex_dispatch.iloc[:,10]
+                                H2_produced[i1:i2] = flex_dispatch.iloc[:,11]
+                            
                         
-                            # flex_dispatch = styrning.styrning2_alt(i1=i1, H2_demand=h2_demand_kg[i1:i2], H2_storage=h2_storage_list[i1:i2], h2st_size_vector=h2st_size_vector, P_bau=electrolyzer[i1:i2], P_pv=res.pv_gen[i1:i2], P_max=elz_size_vector[0], h2_prod=pem2.h2_prod, FCR_D=True, FCR_U=False, FCR_N=False, Flex_frac_FCR_D=FCR_data[0], Flex_frac_FCR_U=FCR_data[1], FCR_D_power=FCR_data[3], FCR_D_price=FCR_data[4], FCR_U_power=FCR_data[5], FCR_U_prize=FCR_data[6])
-                            
-                            # #Updates previous values in accordance with flexibility behaviour
-                            # electrolyzer[i1:i2] = flex_dispatch[0]
-                            # Income_flex[i1:i2] = flex_dispatch[1]
-                            # E_activated[i1:i2] = flex_dispatch[2]
-                            # h2_storage_list[i1:i2] = flex_dispatch[3]
-                            
                         h2_storage_list_prev = np.roll(h2_storage_list, 1) # Creating previous hour storage array
                         h2_storage_list_prev[0] = 0
                         
-                        # Simons dispatch kan komma in här
                         """ Hourly operation based on dispatch """
                         # Number of cold starts
                         starts = np.zeros(len(electrolyzer))
@@ -464,8 +534,12 @@ for e in range(len(elz_size_vector)):
                         heat_income = (((heat_wwtp[0:1415]-heat_elz_use[0:1415]).sum() + (heat_wwtp[8016:8759]-heat_elz_use[8016:8759]).sum())*heat.dh_price[3]/1000) + (((heat_wwtp[1416:3623]-heat_elz_use[1416:3623]).sum() + (heat_wwtp[5832:8015]-heat_elz_use[5832:8015]).sum())*heat.dh_price[0]/1000) + (((heat_wwtp[3624:5831]-heat_elz_use[3624:5831]).sum())*heat.dh_price[1]/1000) #Heat income with variable DH price
                         # heat_income = heat_income + (np.average([dh_winter,dh_summer,dh_spr_aut,dh_spr_aut]) * 3037) # Assuming replacing hygienization as well
                         # heat_income = np.average([dh_winter,dh_summer,dh_spr_aut,dh_spr_aut]) * heat_prod.sum() * heat_frac_use / 1000 # Assuming a fix utilization factor
-                        by_income = o2_income + heat_income # Total by-product income
-
+                        if Flex_resources == 'Yes':
+                            BM_income = sum(Income_flex)*(income_frac_vector[f]/100) #Income from participation on the balancing market
+                        else:
+                            BM_income = 0
+                        by_income = o2_income + heat_income + BM_income # Total by-product income
+                       
                         """ KPI calculations """
 
                         # Economic KPIs
@@ -492,7 +566,8 @@ for e in range(len(elz_size_vector)):
                         # lcop2g_diff_rel_o2 = (lcop2g-lcop2g_noheat) / lcop2g
                         # lcop2g_diff_rel_o2_curt = (lcop2g_curt-lcop2g_noheat_curt) / lcop2g_curt
                         # lcom_diff_rel_o2_curt = (lcom-msp_noheat_curt) / lcom
-                        
+                        lcop2g_noBM = tec.lcox(opex=OPEX_tot-by_income+BM_income, capex=CAPEX, stack=H2_STACK, prod=ch4_p2g, stack_reps=stack_reps, rep_years=rep_years) # Levelized cost of power-to-gas [€/MWh of CH4] if no income from BM
+
                         # Net present values
                         # income_gas = by_income + (gas_price * ch4_p2g) #[€] Income including gas sales
                         # npv = tec.npv(opex=OPEX_tot, income=income_gas, capex=CAPEX, stack=H2_STACK, stack_reps=stack_reps, rep_years=rep_years) #[€]
@@ -517,7 +592,12 @@ for e in range(len(elz_size_vector)):
                         aef_net, mef_net, __, __ = tec.emissions(aefs=grid.aefs, mefs=grid.mefs, wind_efs=res.wind_efs, pv_efs=res.pv_efs, grid=grid_use, wind=wind_use, pv=pv_use, prod=ch4_p2g, heat_use=heat_wwtp.sum()+1000, heat_aef=heat.ems, heat_mef=heat.ems_marginal, o2_use=o2_energy_savings, bg_ef=biogas.ef, flared=flared_gas.sum())
                            
                         if run_type == "optimization":
-                            results['E: {}, M: {}, S: {}, W: {}, P: {}, B: {}'.format(pem.size/1000,meth.size/1000,storage.size,wind_size/1000,pv_size/1000,bat.size)] = [lcop2g_curt, lcop2g, lcom, lcom_no_curt, n_gas, n_heat, n_tot, aef_net, mef_net, sum(starts), sum(electrolyzer_standby), elz_flh, flare_frac, o2_use_frac, o2_wwtp_use_frac, heat_use_frac, heat_wwtp_use_frac, res_frac, lcop2g_diff_curt, lcop2g_diff_rel_curt, lcom_diff_curt, lcom_diff_rel_curt, npv_o2, npv_heat] #Saving optimization results
+                            H2_unmet_dem_index = [i for i,x in enumerate(Unmet_demand) if x > 0.01] 
+                            H2_overflow_index = [i for i,x in enumerate(h2_storage_list) if x > elz_size_vector[0]*max_h2st_use] #No of times "flex storage up" is used
+                            H2_underflow_index = [i for i,x in enumerate(h2_storage_list) if x < elz_size_vector[0]*min_h2st_use] #No of times "flex storage down" is used
+                             
+                            results['E: {}, S: {}, H2st: {}, I: {}'.format(pem.size/1000,storage.size, min_max_h2st_use, income_frac_vector[f])] = [lcop2g_curt, lcop2g, lcom, lcom_no_curt, n_gas, n_heat, n_tot, aef_net, mef_net, sum(starts), sum(electrolyzer_standby), elz_flh, flare_frac, o2_use_frac, o2_wwtp_use_frac, heat_use_frac, heat_wwtp_use_frac, res_frac, lcop2g_diff_curt, lcop2g_diff_rel_curt, sum(P_reserved_max), sum(P_reserved_min), sum(Income_flex), len(H2_unmet_dem_index), len(H2_overflow_index), len(H2_underflow_index)]# lcom_diff_curt, lcom_diff_rel_curt, npv_o2, npv_heat, ] #Saving optimization results
+                            #results['E: {}, M: {}, S: {}, W: {}, P: {}, B: {}'.format(pem.size/1000,meth.size/1000,storage.size, wind_size/1000,pv_size/1000,bat.size)] = [lcop2g_curt, lcop2g, lcom, lcom_no_curt, n_gas, n_heat, n_tot, aef_net, mef_net, sum(starts), sum(electrolyzer_standby), elz_flh, flare_frac, o2_use_frac, o2_wwtp_use_frac, heat_use_frac, heat_wwtp_use_frac, res_frac, lcop2g_diff_curt, lcop2g_diff_rel_curt, lcom_diff_curt, lcom_diff_rel_curt, npv_o2, npv_heat] #Saving optimization results
                             count = count + 1 # Counting simulations
                             print('{}/{} simulations performed'.format(count,sims))
                             
@@ -541,6 +621,26 @@ for e in range(len(elz_size_vector)):
                             # heat_income_lcoe = kpis.lcoe(opex=-heat_income, capex=0, stack=0, dr=tec.discount, lt=tec.lifetime, ch4=ch4_p2g, stack_reps=0, rep_years=0) * 100 / total #[€/MWh of CH4]
                             # cost_breakdown['{} MW'.format(elz_size)] = [elz_lcoe,stack_rep_lcoe,water_lcoe,h2st_lcoe,meth_lcoe,comp_lcoe,heat_lcoe,o2_lcoe,install_lcoe,bg_loss_lcoe,grid_lcoe,pv_lcoe1,wind_lcoe1,curt_lcoe1,o2_income_lcoe,heat_income_lcoe,lcop2g_curt] # Table
 
+""" Saving data as excel """
+# Data_to_excel = pd.DataFrame({"Elz": electrolyzer,
+#                               "Elz_da": elz_da,
+#                               "P_flex": P_flex,
+#                               "P_res_max": P_reserved_max,
+#                               "P_res_min": P_reserved_min,
+#                               "E_act_fl": E_activated,
+#                               "Fl_frac_D": Frequency[0],
+#                               "Fl_frac_U": Frequency[1],
+#                               "Income_fl": Income_flex,
+#                               "Storage_da": h2st_da,
+#                               "Storage_fl": h2_storage_list,
+#                               "H2_prod_fl": H2_produced,
+#                               "Branch_min": Branch_min,
+#                               "Branch_D": Branch_D,
+#                               "Branch_U": Branch_U
+#                               })
+
+# Data_to_excel.to_excel("Sim_data.xlsx")
+
 """ Printing and plotting simulation results """
 if run_type == "single":
     # Print tables with main KPIs
@@ -561,9 +661,19 @@ if run_type == "single":
         
         plotting.sankey(grid_use=grid_use, pv_use=pv_use, wind_use=wind_use, bat_in_pv=bat_in_pv, bat_in_wind=bat_in_wind, electrolyzer=electrolyzer, biogas_in=biogas_in, ch4_mol=tec.ch4_mol, bg_comp_power=bg_comp_power, h2_used=h2_used, h2_kg=tec.h2_kg, \
                    flared=flared_gas, meth_el=meth_power, elz_heat_nonnet=elz_heat_nonnet, meth_heat=meth_heat, ch4_total=ch4_total, heat_wwtp=heat_wwtp, o2_energy_savings=o2_energy_savings, aerator_savings=o2.aerator_savings, o2_loss=o2_loss)
-    
-    
-    # End time
-    # end = time.time()
-    # total_time = end - start
-    # print('Time: ' + str(total_time))
+
+if Flex_resources == 'Yes':
+    print("P_reserved_max: " + str(sum(P_reserved_max)))
+    print("P_reserved_min: " + str(sum(P_reserved_min)))
+    print("Income_flex: " + str(sum(Income_flex)))
+    H2_overflow_index = [i for i,x in enumerate(h2_storage_list) if x > elz_size_vector[0]*max_h2st_use] #No of times "flex storage up" is used
+    H2_underflow_index = [i for i,x in enumerate(h2_storage_list) if x < elz_size_vector[0]*min_h2st_use] #No of times "flex storage down" is used
+    H2_unmet_dem_index = [i for i,x in enumerate(Unmet_demand) if x > 0.01] 
+    print("No. of overflow: "+ str(len(H2_overflow_index)))
+    print("No. of underflow: "+ str(len(H2_underflow_index)))
+    print("No. of unmet dem: "+ str(len(H2_unmet_dem_index)))
+results.to_excel("E:"+str(elz_size_vector[0])+"-"+str(elz_size_vector[-1])+"_S:"+str(h2st_size_vector[0])+"-"+str(h2st_size_vector[-1])+"_I:"+str(income_frac_vector[0])+"-"+str(income_frac_vector[-1])+"_H2st:"+str(min_max_h2st_use)+".xlsx")
+ # End time
+end = time.time()
+total_time = end - start
+print('Time: ' + str(total_time))
