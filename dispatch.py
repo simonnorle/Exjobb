@@ -34,6 +34,8 @@ def p2g_wwtp3(
     h2st_prev,  # storage from previous day
     meth_max,  # maximum H2 use [kg/h]
     meth_min,  # minimum H2 use [kg/h]
+    min_h2st_use, #Minimum fraction of the storage that is used by the day-ahead optimizer
+    max_h2st_use, #Maximum fraction of the storage that is used by the day-ahead optimizer
     meth_el_factor: float = 0.0, #[kWh/molCO2 converted]
     comp_el_factor: float = 0.0, #[kWh/mol compressed gas]
     meth_el: float = 0.0, #electricity demand for methanation and biogas compression [kWh/molCO2]
@@ -159,8 +161,8 @@ def p2g_wwtp3(
         wind_el.append(plp.LpVariable("wind_el_{}".format(i), 0, None))
         # PV-based operation
         pv_el.append(plp.LpVariable("pv_el_{}".format(i), 0, None))
-        # Hydrogen storage
-        h2st.append(plp.LpVariable("h2st_{}".format(i), 0, h2st_max))
+        # Hydrogen storage, with max/min_h2st_use in kg (not fraction)
+        h2st.append(plp.LpVariable("h2st_{}".format(i), 0+min_h2st_use, h2st_max-max_h2st_use))
         # Hydrogen production and utilization
         h2_prod.append(plp.LpVariable("h2_prod_{}".format(i), 0, None))
         h2_prod_start.append(plp.LpVariable("h2_prod_start_{}".format(i), 0, None))

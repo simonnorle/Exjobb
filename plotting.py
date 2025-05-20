@@ -15,6 +15,18 @@ import math
 import plotly.io as pio
 
 
+import parameters as param
+xpoints = np.linspace(0.0,1.0, num=10001)
+pem2 = param.Electrolyzer(10)
+pem2.efficiency('No plot', 10000)
+ypoints = pem2.h2_prod
+plot = plt.plot(xpoints,ypoints)
+plt.xlabel("Dellast [%]")
+plt.ylabel("Vätgasproduktion [kg]")
+
+
+
+
 def byprods(
         ):
     """
@@ -198,13 +210,49 @@ def sankey(grid_use, pv_use, wind_use, bat_in_pv, bat_in_wind, electrolyzer, bio
      link = dict(
        source = [0, 1, 2, 4, 5, 5, 4, 3, 4, 6, 7, 4, 6, 9, 9, 10, 10, 8, 8, 3, 6, 9], # indices correspond to labels.
        target = [4, 4, 4, 5, 4, 11, 6, 7, 7, 9, 9, 9, 10, 10, 14, 12, 11, 12, 11, 11, 11, 11],
-       value = [gr_el,pv_el,wi_el,el_bat,bat_el,bat_ls,el_h2,bg_cm,el_cm,h2_ch4,cm_ch4,el_ch4,h2_ht,ch4_ht,ch4_ch4,ht_ww,ht_ls,o2_ww,o2_ls,bg_ls,h2_ls,ch4_ls],
+       value = [gr_el,pv_el,wi_el,el_h2,bg_cm,el_cm,h2_ch4,cm_ch4,el_ch4,h2_ht,ch4_ht,ch4_ch4,ht_ww,ht_ls,o2_ww,o2_ls,bg_ls,h2_ls,ch4_ls], #,el_bat,bat_el,bat_ls borttagna från index 3-5
        # label =  [],
-       color =  ['gold','gold','gold','gold','gold','gold','gold','seagreen','gold','steelblue','seagreen','gold','indianred','indianred','coral','indianred','indianred','purple','purple','seagreen','steelblue','coral']
+       color =  ['gold','gold','gold','gold','seagreen','gold','steelblue','seagreen','gold','indianred','indianred','coral','indianred','indianred','purple','purple','seagreen','steelblue','coral'] #,'gold','gold','gold' borttagna från index 3-5
        ))])
 
     fig.update_layout(title_text="P2G energy flows", font_size=10)
     fig.show()
+    
+    
+def heatmap_plot():
+    import pandas as pd
+    #import seaborn as sns
+    data_read = r'/Users/simonnorle/Documents/Uppsala - år 5/Exjobb/Jämförelser resultat 2021(automatiskt återställd).xlsx'
+    data_full = pd.read_excel(data_read, sheet_name="LCOP2G", header=1, index_col=0, skiprows=2)
+    data_s100 = data_full.iloc[:,0:14]
+    data_s200 = data_full.iloc[:,14:28]
+    data_s250 = data_full.iloc[:,28:42]
+    data_s300 = data_s100.iloc[:,42:58]
+    data_s350 = data_s100.iloc[:,58:72]
+    fig, axs = plt.subplots(3,2, sharex=True)
+    axs[0,0] = sns.heatmap(data_s100)
+    axs[0,0].set_title("100 kg lager")
+    axs[0,1] = sns.heatmap(data_s200)
+    axs[0,1].set_title("200 kg lager")
+    axs[1,0] = sns.heatmap(data_s250)
+    axs[1,0].set_title("250 kg lager")
+    axs[1,1] = sns.heatmap(data_s300)
+    axs[1,1].set_title("300 kg lager")
+    axs[2,0] = sns.heatmap(data_s350)
+    axs[2,0].set(title="350 kg lager")
+    
+    
+    for ax in axs.flat:
+        ax.set(xlabel="Electrolysör [MW]", ylabel="Bufferlager [kg]")
+    plt.show()
+    
+    #FCR_D_power = np.array(pd.read_excel(FCR_read,usecols="T",skiprows=0))
+    
+    
+    
+    
+    
+    
     
     
     
